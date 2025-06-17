@@ -1,0 +1,68 @@
+### Register a New Guest User
+POST http://localhost:5000/api/register
+Content-Type: application/json
+
+{
+    "username": "testguest",
+    "password": "guestpassword"
+}
+
+### Register a New Admin User
+# This request registers an 'adminuser'. You only need to run this ONCE successfully.
+# If you run it again after it's been created, you'll get a "Username already exists" error, which is fine.
+POST http://localhost:5000/api/register
+Content-Type: application/json
+
+{
+    "username": "adminuser",
+    "password": "adminpassword",
+    "role": "admin"
+}
+
+### Register a New Customer Service User
+# This request registers a 'csuser'. You only need to run this ONCE successfully.
+# POST http://localhost:5000/api/register
+# Content-Type: application/json
+
+# {
+#     "username": "csuser",
+#     "password": "cspassword",
+#     "role": "customer service"
+# }
+
+### Login with Registered Guest User (Success)
+POST http://localhost:5000/api/login
+Content-Type: application/json
+
+{
+    "username": "testguest",
+    "password": "guestpassword"
+}
+
+### Login with Non-existent User (Expected Failure)
+POST http://localhost:5000/api/login
+Content-Type: application/json
+
+{
+    "username": "nonexistent",
+    "password": "fakepassword"
+}
+
+### Login with Correct User, Wrong Password (Expected Failure)
+POST http://localhost:5000/api/login
+Content-Type: application/json
+
+{
+    "username": "testguest",
+    "password": "wrongpassword"
+}
+
+### Login as Admin User to get Token
+# This is the request you MUST send and copy the token from for your room_tests.http file.
+POST http://localhost:5000/api/login
+Content-Type: application/json
+
+{
+    "username": "adminuser",
+    "password": "adminpassword"
+}

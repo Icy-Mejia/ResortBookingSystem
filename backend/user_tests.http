@@ -1,0 +1,35 @@
+# @adminToken variable: 
+# IMPORTANT: Update this with a fresh admin token obtained from auth_tests.http after logging in as an admin.
+@adminToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6ImFkbWluIiwiaWF0IjoxNzUwMTcxMTIxLCJleHAiOjE3NTAxNzQ3MjF9.nwa8_yqzJKcKf3jC86WvfLDKeICfMCex6dfIoKZrIc4
+
+### Get All Users (Admin Only)
+# This retrieves a list of all registered users in the system.
+GET http://localhost:5000/api/admin/users
+Authorization: Bearer {{adminToken}}
+
+### Get User by ID (Admin Only)
+# Replace YOUR_USER_ID_HERE with an actual User ID from the "Get All Users" response.
+GET http://localhost:5000/api/admin/users/1
+Authorization: Bearer {{adminToken}}
+
+### Update User Role (Admin Only)
+# IMPORTANT:
+# 1. Replace YOUR_USER_ID_TO_UPDATE_HERE with the ID of a user whose role you want to change (e.g., a guest user's ID).
+# 2. Do NOT try to change the role of the admin account you are currently using, as there's a security check for that.
+# 3. Valid roles: "guest", "admin", "customer service".
+PUT http://localhost:5000/api/admin/users/1
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+    "role": "customer service"
+}
+
+### Delete User (Admin Only)
+# IMPORTANT:
+# 1. Replace YOUR_USER_ID_TO_DELETE_HERE with the ID of a user you want to delete.
+# 2. NEVER delete the admin account you are currently using.
+# 3. If a user has active bookings, the server might prevent deletion (due to foreign key constraints).
+#    You might need to cancel or delete their bookings first from the database or via the booking endpoints.
+DELETE http://localhost:5000/api/admin/users/1
+Authorization: Bearer {{adminToken}}

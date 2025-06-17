@@ -1,0 +1,73 @@
+@adminToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6ImFkbWluIiwiaWF0IjoxNzUwMTcwMTIyLCJleHAiOjE3NTAxNzM3MjJ9.BkLrFao74SoKj9LB196cwKM5NbRhWQEv5r_Jamxc5lk
+
+### Add Room 101 (Admin Only) - NEW UNIQUE ROOM NUMBER
+# If you run this again and get "Room number already exists", change "101" to "102", "103", etc.
+POST http://localhost:5000/api/admin/rooms
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+    "roomNumber": "102",
+    "type": "Standard Room",
+    "pricePerNight": 100.00,
+    "capacity": 2,
+    "description": "A cozy standard room with garden view.",
+    "imageUrl": "http://example.com/room101.jpg"
+}
+
+### Add Room 202 (Admin Only) - ANOTHER NEW UNIQUE ROOM NUMBER
+# This one will be marked as unavailable by default.
+# If you run this again and get "Room number already exists", change "202" to "203", "204", etc.
+POST http://localhost:5000/api/admin/rooms
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+    "roomNumber": "202",
+    "type": "Deluxe Suite",
+    "pricePerNight": 250.00,
+    "capacity": 4,
+    "description": "Spacious suite with ocean view and balcony.",
+    "imageUrl": "http://example.com/room202.jpg",
+    "isAvailable": false
+}
+
+### Get All Rooms (Admin Only - includes unavailable rooms for management)
+# IMPORTANT: Run this AFTER adding rooms to get their actual database IDs.
+GET http://localhost:5000/api/admin/rooms
+Authorization: Bearer {{adminToken}}
+
+### Get All Available Rooms (Guest/Public Access)
+GET http://localhost:5000/api/rooms
+
+### Update Room (Admin Only)
+# IMPORTANT: Replace 'YOUR_ROOM_ID_HERE' in the URL with the actual 'id' of the room you want to update.
+# You MUST get this ID from the response of the "Get All Rooms (Admin Only)" request above.
+# Example: If room "101" has ID 1, use /api/admin/rooms/1
+PUT http://localhost:5000/api/admin/rooms/YOUR_ROOM_ID_HERE
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+    "pricePerNight": 120.00,
+    "isAvailable": true,
+    "description": "An updated standard room with an improved view."
+}
+
+### Make an Existing Room Unavailable (Admin Only)
+# Use this to specifically change 'isAvailable' to false.
+# IMPORTANT: Replace YOUR_ROOM_ID_HERE with the actual ID of the room you want to change (e.g., /api/admin/rooms/1).
+PUT http://localhost:5000/api/admin/rooms/YOUR_ROOM_ID_HERE
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+    "isAvailable": false
+}
+
+
+### Delete Room (Admin Only)
+# IMPORTANT: Replace 'YOUR_ROOM_ID_HERE' in the URL with the actual 'id' of the room you want to delete.
+# Be careful when deleting, as this cannot be easily undone!
+DELETE http://localhost:5000/api/admin/rooms/YOUR_ROOM_ID_HERE
+Authorization: Bearer {{adminToken}}

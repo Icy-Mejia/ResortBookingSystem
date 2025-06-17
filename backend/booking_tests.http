@@ -1,0 +1,136 @@
+@userToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6Imd1ZXN0IiwiaWF0IjoxNzUwMTY5ODA3LCJleHAiOjE3NTAxNzM0MDd9.QD37_ar6_LkKyaD_gIQFcjrjK873lcHvry7rEf_CtXE
+# IMPORTANT: Update this with a fresh admin token obtained from auth_tests.http after logging in as an admin.
+@adminToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6ImFkbWluIiwiaWF0IjoxNzUwMTY5NTc1LCJleHAiOjE3NTAxNzMxNzV9.5ho4e_-Ku6l8-TxFgWJvtxy47BM3SV_eY2v3Ou7AKDg
+
+### Create a New Booking (Requires any logged-in user)
+# IMPORTANT:
+# 1. Replace YOUR_ROOM_ID_HERE with an actual Room ID from your 'rooms' table (e.g., Room 101's ID).
+#    Make sure the room is 'isAvailable = 1' (TRUE) in your database.
+# 2. Adjust check_in_date and check_out_date to future dates that don't overlap with existing bookings.
+#    Dates should be in 'YYYY-MM-DD' format.
+POST http://localhost:5000/api/bookings
+Content-Type: application/json
+Authorization: Bearer {{userToken}}
+
+{
+    "room_id": 5,
+    "check_in_date": "2025-07-10",
+    "check_out_date": "2025-07-15",
+    "guests": 2
+}
+
+### Get My Bookings (Requires any logged-in user)
+# This request will retrieve all bookings for the user whose token is used.
+# IMPORTANT: Use the same @userToken that you used to create the booking.
+GET http://localhost:5000/api/bookings/my
+Authorization: Bearer {{userToken}}
+
+### Get All Bookings (Admin/Customer Service Only)
+# IMPORTANT: Use an @adminToken or @customerServiceToken here!
+GET http://localhost:5000/api/admin/bookings
+Authorization: Bearer {{adminToken}}
+
+### Update Booking Status (Admin/Customer Service Only)
+# IMPORTANT:
+# 1. Replace YOUR_BOOKING_ID_HERE with an actual Booking ID from your database (e.g., the ID from the "Get All Bookings" response).
+# 2. Change the "status" value to one of the allowed options: "pending", "confirmed", "cancelled", "completed".
+# 3. Ensure you are using an @adminToken or @customerServiceToken.
+PUT http://localhost:5000/api/admin/bookings/1/status
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+    "status": "confirmed"
+}
+
+### Cancel My Own Booking (Guest)
+# IMPORTANT:
+# 1. Replace YOUR_BOOKING_ID_HERE with the ID of a booking created by the user whose @userToken is used below.
+# 2. Ensure the booking status is NOT already 'cancelled' or 'completed'.
+PUT http://localhost:5000/api/bookings/2/cancel
+Content-Type: application/json
+Authorization: Bearer {{userToken}}
+
+### Cancel Any Booking (Admin/Customer Service)
+# IMPORTANT:
+# 1. Replace YOUR_BOOKING_ID_HERE with the ID of ANY booking in the database.
+# 2. Ensure the booking status is NOT already 'cancelled' or 'completed'.
+# 3. Use an @adminToken or @customerServiceToken.
+PUT http://localhost:5000/api/bookings/1/cancel
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+### Try to book an unavailable room (Expected Failure: 400 Bad Request)
+# Make sure YOUR_UNAVAILABLE_ROOM_ID_HERE points to a room where isAvailable = 0 (FALSE)
+# POST http://localhost:5000/api/bookings
+# Content-Type: application/json
+# Authorization: Bearer {{userToken}}
+
+# {
+#    "room_id": YOUR_UNAVAILABLE_ROOM_ID_HERE,
+#    "check_in_date": "2025-08-01",
+#    "check_out_date": "2025-08-05",
+#    "guests": 1
+# }
+
+### Try to book an invalid room ID (Expected Failure: 404 Not Found)
+# POST http://localhost:5000/api/bookings
+# Content-Type: application/json
+# Authorization: Bearer {{userToken}}
+
+# {
+#    "room_id": 9999,
+#    "check_in_date": "2025-09-01",
+#    "check_out_date": "2025-09-05",
+#    "guests": 1
+# }
+
+### Try to book with past check-in date (Expected Failure: 400 Bad Request)
+# POST http://localhost:5000/api/bookings
+# Content-Type: application/json
+# Authorization: Bearer {{userToken}}
+
+# {
+#    "room_id": YOUR_ROOM_ID_HERE,
+#    "check_in_date": "2024-01-01",
+#    "check_out_date": "2024-01-05",
+#    "guests": 1
+# }
+
+### Try to book with check-out before or same as check-in (Expected Failure: 400 Bad Request)
+# POST http://localhost:5000/api/bookings
+# Content-Type: application/json
+# Authorization: Bearer {{userToken}}
+
+# {
+#    "room_id": YOUR_ROOM_ID_HERE,
+#    "check_in_date": "2025-10-10",
+#    "check_out_date": "2025-10-10",
+#    "guests": 1
+# }
+
+### Try to book with guests exceeding room capacity (Expected Failure: 400 Bad Request)
+# IMPORTANT: Use a room ID where its 'capacity' is clearly less than the 'guests' you put here.
+# POST http://localhost:5000/api/bookings
+# Content-Type: application/json
+# Authorization: Bearer {{userToken}}
+
+# {
+#    "room_id": YOUR_ROOM_ID_HERE,
+#    "check_in_date": "2025-11-01",
+#    "check_out_date": "2025-11-05",
+#    "guests": 100
+# }
+
+### Try to book a room that has an OVERLAP with an existing booking (Expected Failure: 409 Conflict)
+# IMPORTANT: Send the first "Create a New Booking" request successfully first, then change dates to overlap.
+# POST http://localhost:5000/api/bookings
+# Content-Type: application/json
+# Authorization: Bearer {{userToken}}
+
+# {
+#    "room_id": YOUR_ROOM_ID_HERE,
+#    "check_in_date": "2025-07-12", # Overlaps with 2025-07-10 to 2025-07-15
+#    "check_out_date": "2025-07-17",
+#    "guests": 2
+# }
