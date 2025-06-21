@@ -1,0 +1,124 @@
+/* Path: frontend/src/pages/RoomsPage.css */
+
+.rooms-container {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 20px;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.rooms-container h2 {
+    text-align: center;
+    color: #333;
+    margin-bottom: 1.5rem;
+    font-size: 2.5rem;
+    font-weight: 600;
+}
+
+.rooms-intro {
+    text-align: center;
+    color: #666;
+    margin-bottom: 2.5rem;
+    font-size: 1.1rem;
+}
+
+.rooms-list {
+    display: grid;
+    gap: 30px;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    justify-content: center; /* Center items if they don't fill the grid */
+}
+
+.room-card {
+    background-color: #f9f9f9;
+    border: 1px solid #eee;
+    border-radius: 10px;
+    overflow: hidden; /* Ensures image corners are rounded */
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    display: flex;
+    flex-direction: column;
+}
+
+.room-card:hover {
+    transform: translateY(-7px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+.room-image {
+    width: 100%;
+    height: 250px; /* Fixed height for consistency */
+    object-fit: cover; /* Cover the area, cropping if necessary */
+    border-bottom: 1px solid #eee;
+}
+
+.room-info {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1; /* Allows info section to grow */
+}
+
+.room-info h3 {
+    color: #007bff;
+    font-size: 1.6rem;
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+.room-description {
+    color: #555;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    margin-bottom: 15px;
+    flex-grow: 1; /* Allows description to take available space */
+}
+
+.room-details p {
+    margin-bottom: 5px;
+    color: #444;
+    font-size: 0.9rem;
+}
+
+.room-details p strong {
+    color: #222;
+}
+
+.book-now-button {
+    background-color: #f0a500;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: bold;
+    margin-top: 20px;
+    width: 100%; /* Make button full width */
+    transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.book-now-button:hover {
+    background-color: #d49000;
+    transform: translateY(-1px);
+}
+
+.error-message {
+    color: #dc3545;
+    text-align: center;
+    font-size: 1.1rem;
+    font-weight: bold;
+    margin-top: 30px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .rooms-list {
+        grid-template-columns: 1fr; /* Stack cards on smaller screens */
+    }
+    .rooms-container h2 {
+        font-size: 2rem;
+    }
+}

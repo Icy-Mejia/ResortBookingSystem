@@ -1,0 +1,22 @@
+/* Path: frontend/src/App.css */
+
+/* General App container styling */
+.App {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh; /* Ensures the app takes at least full viewport height */
+    background-color: #f4f7f6; /* Light background for the whole app */
+    color: #333; /* Default text color */
+}
+
+/* Main content area to push footer down and provide consistent padding */
+.main-content {
+    flex-grow: 1; /* Allows main content to expand and push footer down */
+    padding: 20px; /* General padding for pages */
+}
+
+/* Basic button styling (can be extended) */
+button {
+    cursor: pointer;
+    font-family: inherit; /* Inherit font from body */
+}

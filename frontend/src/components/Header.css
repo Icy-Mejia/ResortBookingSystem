@@ -1,0 +1,112 @@
+/* Path: frontend/src/components/Header.css */
+
+.header {
+    background-color: #333;
+    color: white;
+    padding: 1rem 0;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.navbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+.navbar-brand {
+    font-size: 1.8rem;
+    font-weight: bold;
+    color: white;
+    text-decoration: none;
+    transition: color 0.3s ease;
+}
+
+.navbar-brand:hover {
+    color: #f0a500;
+}
+
+.nav-links {
+    list-style: none;
+    display: flex;
+    margin: 0;
+    padding: 0;
+}
+
+.nav-links li {
+    margin-left: 20px;
+}
+
+.nav-links a {
+    color: white;
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 1rem;
+    transition: color 0.3s ease, text-decoration 0.3s ease;
+    padding: 5px 0; /* Add some padding for hover effect */
+}
+
+.nav-links a:hover,
+.nav-links a.active-link { /* Active link styling */
+    color: #f0a500;
+    text-decoration: underline;
+}
+
+.auth-controls {
+    display: flex;
+    align-items: center;
+}
+
+.welcome-message {
+    color: white;
+    margin-right: 15px;
+    font-size: 0.95rem;
+}
+
+.logout-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    color: white;
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 1rem; /* Match other nav links */
+    transition: color 0.3s ease, text-decoration 0.3s ease;
+    padding: 5px 0; /* Match padding of nav links */
+}
+
+.logout-button:hover {
+    color: #f0a500;
+    text-decoration: underline;
+}
+
+.login-link,
+.register-link {
+    color: white;
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 1rem;
+    transition: color 0.3s ease, text-decoration 0.3s ease;
+    padding: 5px 10px;
+    border-radius: 5px;
+}
+
+.login-link {
+    margin-right: 10px;
+    background-color: #007bff;
+}
+
+.register-link {
+    background-color: #28a745;
+}
+
+.login-link:hover,
+.register-link:hover,
+.login-link.active-link,
+.register-link.active-link {
+    opacity: 0.9;
+    text-decoration: none; /* Remove underline on active/hover for buttons */
+}

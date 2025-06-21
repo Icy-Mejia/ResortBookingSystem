@@ -1,0 +1,97 @@
+/* Path: frontend/src/pages/BookingsPage.css */
+
+.bookings-container {
+    padding: 20px;
+    max-width: 900px;
+    margin: 20px auto;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.bookings-container h2 {
+    color: #333;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.bookings-intro {
+    text-align: center;
+    color: #666;
+    margin-bottom: 30px;
+}
+
+.bookings-list {
+    display: grid;
+    gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+
+.booking-card {
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    transition: transform 0.2s ease-in-out;
+}
+
+.booking-card:hover {
+    transform: translateY(-5px);
+}
+
+.booking-card h3 {
+    color: #007bff;
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-size: 1.2em;
+}
+
+.booking-card p {
+    margin-bottom: 8px;
+    font-size: 0.95em;
+    color: #555;
+}
+
+.booking-card p strong {
+    color: #333;
+}
+
+.booking-status {
+    font-weight: bold;
+    padding: 4px 8px;
+    border-radius: 4px;
+    color: #fff;
+    font-size: 0.85em;
+}
+
+.status-pending {
+    background-color: #ffc107; /* Orange */
+}
+
+.status-confirmed {
+    background-color: #28a745; /* Green */
+}
+
+.status-cancelled {
+    background-color: #dc3545; /* Red */
+}
+
+.status-completed {
+    background-color: #6c757d; /* Gray */
+}
+
+.error-message {
+    color: #dc3545;
+    text-align: center;
+    font-weight: bold;
+}
+
+.bookings-container a {
+    color: #007bff;
+    text-decoration: none;
+}
+
+.bookings-container a:hover {
+    text-decoration: underline;
+}

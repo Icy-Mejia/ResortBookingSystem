@@ -3,8 +3,8 @@ POST http://localhost:5000/api/register
 Content-Type: application/json
 
 {
-    "username": "testguest",
-    "password": "guestpassword"
+    "username": "aldawg",
+    "password": "123"
 }
 
 ### Register a New Admin User

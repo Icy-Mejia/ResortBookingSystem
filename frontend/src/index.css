@@ -1,0 +1,36 @@
+/* Path: frontend/src/index.css */
+
+/* Basic CSS Reset/Normalize for consistent styling across browsers */
+* {
+  box-sizing: border-box; /* Include padding and border in the element's total width and height */
+  margin: 0;             /* Remove default margins */
+  padding: 0;            /* Remove default paddings */
+}
+
+/* Apply a consistent font-family to the entire body */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif; /* A common, cross-platform sans-serif font stack */
+  -webkit-font-smoothing: antialiased; /* Improve text rendering on macOS/iOS */
+  -moz-osx-font-smoothing: grayscale;  /* Improve text rendering on macOS */
+  line-height: 1.6; /* Improve readability */
+  color: #333; /* Default text color, overridden by more specific rules */
+  background-color: #f4f7f6; /* Light background color for the overall page */
+}
+
+/* Styling for code blocks (e.g., in development tools or documentation) */
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace; /* Monospace font for code */
+}
+
+/* Global link styling to remove default underline and apply consistent color */
+a {
+  text-decoration: none;
+  color: inherit; /* Inherit color from parent by default */
+}
+
+a:hover {
+  text-decoration: underline; /* Add underline on hover for clarity */
+}

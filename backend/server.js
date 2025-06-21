@@ -1,721 +1,325 @@
-// Load environment variables from .env file
-require('dotenv').config();
+// Path: backend/server.js
+require('dotenv').config(); // Load environment variables from .env file
+const express = require('express');
+const sqlite3 = require('sqlite3').verbose();
+const bcrypt = require('bcryptjs'); // For password hashing
+const jwt = require('jsonwebtoken'); // For creating and verifying tokens
+const cors = require('cors'); // Import cors
 
-// Import necessary Node.js modules
-const express = require('express');    // Our web framework
-const mysql = require('mysql2/promise'); // For interacting with MySQL (using promise-based methods)
-const cors = require('cors');          // For Cross-Origin Resource Sharing
-const bcrypt = require('bcryptjs');    // For password hashing
-const jwt = require('jsonwebtoken');   // For JSON Web Tokens (authentication)
-
-// Initialize the Express application
 const app = express();
-// Set the port from environment variables or default to 5000
 const PORT = process.env.PORT || 5000;
+const JWT_SECRET = process.env.JWT_SECRET; // Access JWT_SECRET from .env
 
-// --- Middleware Setup ---
-// Enable CORS for all routes, allowing your frontend to make requests
-app.use(cors());
-// Enable Express to parse JSON formatted request bodies (e.g., from frontend forms)
-app.use(express.json());
+// Connect to SQLite database
+const db = new sqlite3.Database('./database.sqlite', (err) => {
+    if (err) {
+        console.error('Error connecting to database:', err.message);
+    } else {
+        console.log('Connected to the SQLite database.');
+        // Initialize database tables
+        db.exec(`
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                role TEXT DEFAULT 'user' -- 'user' or 'admin'
+            );
 
-// --- Middleware for protecting routes ---
-// This middleware will verify JWT tokens sent with requests
-const authMiddleware = (req, res, next) => {
-    // console.log('Received headers:', req.headers); // Diagnostic log - uncomment if needed for debugging
+            CREATE TABLE IF NOT EXISTS rooms (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type TEXT NOT NULL,
+                room_number TEXT UNIQUE NOT NULL,
+                description TEXT,
+                price_per_night REAL NOT NULL,
+                capacity INTEGER NOT NULL,
+                image_url TEXT,
+                availability BOOLEAN DEFAULT 1 -- 1 for available, 0 for booked/unavailable
+            );
 
-    // Get token from the 'Authorization' header (e.g., "Bearer <token>")
-    const token = req.header('Authorization');
+            CREATE TABLE IF NOT EXISTS bookings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                room_id INTEGER NOT NULL,
+                check_in_date TEXT NOT NULL,
+                check_out_date TEXT NOT NULL,
+                guests INTEGER NOT NULL,
+                total_price REAL NOT NULL,
+                status TEXT DEFAULT 'confirmed', -- e.g., 'confirmed', 'cancelled', 'pending'
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id),
+                FOREIGN KEY (room_id) REFERENCES rooms(id)
+            );
+        `);
 
-    // If no token is provided, deny authorization
-    if (!token) {
-        return res.status(401).json({ message: 'No authentication token provided. Authorization denied.' });
-    }
-
-    // Extract the actual token string (remove "Bearer " prefix)
-    const actualToken = token.startsWith('Bearer ') ? token.slice(7) : token;
-
-    try {
-        // Verify the token using the secret key from .env
-        const decoded = jwt.verify(actualToken, process.env.JWT_SECRET);
-        // Attach the decoded user payload (id, role) to the request object
-        req.user = decoded; // Now, req.user will contain { id: user.id, role: user.role }
-        next(); // Proceed to the next middleware or route handler
-    } catch (err) {
-        // If token is invalid or expired, deny authorization
-        // console.error("JWT Verification Error:", err.message); // Uncomment for more detailed error
-        res.status(401).json({ message: 'Authentication token is invalid or expired.' });
-    }
-};
-
-// Middleware to authorize specific roles
-// This allows restricting access to routes based on user role (e.g., only 'admin', 'customer service')
-const authorizeRoles = (...roles) => { // Takes a list of allowed roles (e.g., 'admin', 'customer service')
-    return (req, res, next) => {
-        // Check if user info is attached (meaning authMiddleware ran successfully) and if the user's role is in the allowed list
-        if (!req.user || !roles.includes(req.user.role)) {
-            return res.status(403).json({ message: 'Access denied. You do not have the necessary permissions.' });
-        }
-        next(); // User has required role, proceed
-    };
-};
-
-// --- Database Connection (MySQL) ---
-let connection; // Declare a variable to hold the database connection outside the function
-
-async function connectToDatabase() {
-    try {
-        connection = await mysql.createConnection({
-            host: process.env.DB_HOST,
-            user: process.env.DB_USER,
-            password: process.env.DB_PASSWORD,
-            database: process.env.DB_DATABASE
-        });
-        console.log('MySQL Database Connected successfully!');
-
-        // Ping the database to keep the connection alive (optional, but good practice for long-running servers)
-        setInterval(async () => {
-            try {
-                await connection.ping();
-                // console.log('MySQL connection pinged successfully.'); // Uncomment for verbose logging
-            } catch (err) {
-                console.error('MySQL connection ping error:', err.message);
-                // Attempt to re-establish connection if ping fails
-                await connection.end(); // Close the broken connection
-                await connectToDatabase(); // Try to reconnect
-            }
-        }, 60 * 60 * 1000); // Ping every hour (60 minutes * 60 seconds * 1000 ms)
-
-    } catch (err) {
-        console.error('MySQL Database connection error:', err.message);
-        console.error('Please ensure XAMPP MySQL server is running and .env file credentials are correct.');
-        // Exit the process if we can't connect to the database, as the app won't function without it
-        process.exit(1); 
-    }
-}
-
-// Call the function to connect to the database when the server starts
-connectToDatabase();
-
-// --- API Endpoints ---
-
-// A simple test route to ensure the backend server is running and accessible
-app.get('/', (req, res) => {
-    res.send('Backend server is running!');
-});
-
-// DFD Data Flow: Registration (from Guest)
-// This allows new guests to create an account within the system.
-app.post('/api/register', async (req, res) => {
-    const { username, password, role } = req.body;
-
-    // Basic server-side validation
-    if (!username || !password) {
-        return res.status(400).json({ message: 'Please enter all required fields: username and password.' });
-    }
-
-    try {
-        // Check if a user with the given username already exists in the users table
-        const [users] = await connection.execute('SELECT * FROM users WHERE username = ?', [username]);
-        if (users.length > 0) {
-            return res.status(400).json({ message: 'Username already exists. Please choose a different one.' });
-        }
-
-        // Hash the password for security
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
-
-        // Determine the role for the new user
-        const assignedRole = (role && ['guest', 'admin', 'customer service'].includes(role.toLowerCase())) ? role.toLowerCase() : 'guest';
-
-        // Insert the new user into the 'users' table
-        const [result] = await connection.execute(
-            'INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
-            [username, hashedPassword, assignedRole]
-        );
-
-        const userId = result.insertId;
-
-        // Generate a JSON Web Token (JWT) for the newly registered user
-        const token = jwt.sign(
-            { id: userId, role: assignedRole },
-            process.env.JWT_SECRET,
-            { expiresIn: '1h' }
-        );
-
-        res.status(201).json({
-            message: 'User registered successfully!',
-            token,
-            user: {
-                id: userId,
-                username,
-                role: assignedRole
+        // Seed a default admin user if not exists (optional)
+        db.get("SELECT * FROM users WHERE username = 'admin'", [], (err, row) => {
+            if (!row) {
+                bcrypt.hash('adminpassword', 10, (err, hash) => {
+                    if (err) {
+                        console.error('Error hashing admin password:', err.message);
+                        return;
+                    }
+                    db.run("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", ['admin', hash, 'admin'], (err) => {
+                        if (err) {
+                            console.error('Error seeding admin user:', err.message);
+                        } else {
+                            console.log('Admin user seeded.');
+                        }
+                    });
+                });
             }
         });
 
-    } catch (err) {
-        console.error('Error during registration:', err.message);
-        res.status(500).json({ message: 'Server error during registration. Please try again later.' });
+        // Seed some default rooms if not exists (optional)
+        db.get("SELECT COUNT(*) as count FROM rooms", [], (err, row) => {
+            if (row.count === 0) {
+                const rooms = [
+                    { type: 'Standard Room', room_number: '101', description: 'Cozy room with a garden view.', price_per_night: 100.00, capacity: 2, image_url: 'https://images.unsplash.com/photo-1596436889110-6127702888d3?q=80&w=1770&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' },
+                    { type: 'Deluxe Room', room_number: '201', description: 'Spacious room with a city view and king-size bed.', price_per_night: 150.00, capacity: 3, image_url: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?q=80&w=1770&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' },
+                    { type: 'Suite', room_number: '301', description: 'Luxury suite with separate living area and balcony.', price_per_night: 250.00, capacity: 4, image_url: 'https://images.unsplash.com/photo-1540541338287-f82e0e402b92?q=80&w=1770&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' },
+                    { type: 'Family Cottage', room_number: '401', description: 'Spacious cottage ideal for families, with two bedrooms.', price_per_night: 300.00, capacity: 5, image_url: 'https://images.unsplash.com/photo-1571004381273-90d402324e93?q=80&w=1770&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' }
+                ];
+                const stmt = db.prepare("INSERT INTO rooms (type, room_number, description, price_per_night, capacity, image_url) VALUES (?, ?, ?, ?, ?, ?)");
+                rooms.forEach(room => {
+                    stmt.run(room.type, room.room_number, room.description, room.price_per_night, room.capacity, room.image_url);
+                });
+                stmt.finalize(() => {
+                    console.log('Default rooms seeded.');
+                });
+            }
+        });
     }
 });
 
-// DFD Data Flow: Log In (from Guest, Admin, Customer Service)
-// This allows existing users (Guests, Admin, Customer Service) to log into the system.
-app.post('/api/login', async (req, res) => {
+// Middleware
+app.use(express.json()); // For parsing application/json
+app.use(cors()); // Use cors middleware
+
+// JWT verification middleware
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (token == null) return res.status(401).json({ message: 'Authorization token required' });
+
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) {
+            console.error('JWT verification error:', err);
+            return res.status(403).json({ message: 'Token invalid or expired' });
+        }
+        req.user = user; // Attach user payload to request
+        next();
+    });
+};
+
+// --- API Routes ---
+
+// User Registration
+app.post('/api/register', (req, res) => {
     const { username, password } = req.body;
-
-    // Basic server-side validation
     if (!username || !password) {
-        return res.status(400).json({ message: 'Please enter both username and password.' });
+        return res.status(400).json({ message: 'Username and password are required' });
     }
 
-    try {
-        // Check if the user exists in the 'users' table
-        const [users] = await connection.execute('SELECT * FROM users WHERE username = ?', [username]);
-        const user = users[0];
+    bcrypt.hash(password, 10, (err, hash) => {
+        if (err) {
+            return res.status(500).json({ message: 'Error hashing password', error: err.message });
+        }
+        const sql = 'INSERT INTO users (username, password) VALUES (?, ?)';
+        db.run(sql, [username, hash], function (err) {
+            if (err) {
+                if (err.message.includes('UNIQUE constraint failed: users.username')) {
+                    return res.status(409).json({ message: 'Username already exists' });
+                }
+                return res.status(500).json({ message: 'Error registering user', error: err.message });
+            }
+            res.status(201).json({ message: 'User registered successfully', userId: this.lastID });
+        });
+    });
+});
 
+// User Login
+app.post('/api/login', (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) {
+        return res.status(400).json({ message: 'Username and password are required' });
+    }
+
+    const sql = 'SELECT * FROM users WHERE username = ?';
+    db.get(sql, [username], (err, user) => {
+        if (err) {
+            return res.status(500).json({ message: 'Error retrieving user', error: err.message });
+        }
         if (!user) {
-            return res.status(400).json({ message: 'Invalid credentials. User not found.' });
+            return res.status(401).json({ message: 'Invalid username or password' });
         }
 
-        // Compare the provided password with the hashed password stored in the database
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return res.status(400).json({ message: 'Invalid credentials. Password incorrect.' });
-        }
-
-        // Generate a JWT for the authenticated user
-        const token = jwt.sign(
-            { id: user.id, role: user.role },
-            process.env.JWT_SECRET,
-            { expiresIn: '1h' }
-        );
-
-        res.json({
-            message: 'Logged in successfully!',
-            token,
-            user: {
-                id: user.id,
-                username: user.username,
-                role: user.role
+        bcrypt.compare(password, user.password, (err, isMatch) => {
+            if (err) {
+                return res.status(500).json({ message: 'Error comparing passwords', error: err.message });
             }
-        });
-
-    } catch (err) {
-        console.error('Error during login:', err.message);
-        res.status(500).json({ message: 'Server error during login. Please try again later.' });
-    }
-});
-
-// DFD Data Flow: Room Pricing Info (to Guest)
-// Allows guests to view available rooms and their prices.
-app.get('/api/rooms', async (req, res) => {
-    try {
-        // Find all rooms that are marked as available
-        const [rows] = await connection.execute('SELECT id, roomNumber, type, pricePerNight, capacity, description, imageUrl, isAvailable FROM rooms WHERE isAvailable = TRUE');
-        res.json(rows);
-    } catch (err) {
-        console.error('Error fetching available rooms:', err.message);
-        res.status(500).json({ message: 'Server error fetching room information.' });
-    }
-});
-
-// DFD Data Flow: Manage Room & Cottage Prices (from Admin)
-// These routes require admin authentication and authorization.
-
-// Get All Rooms (Admin Only - includes unavailable rooms for management)
-app.get('/api/admin/rooms', authMiddleware, authorizeRoles('admin'), async (req, res) => {
-    try {
-        const [rows] = await connection.execute('SELECT id, roomNumber, type, pricePerNight, capacity, description, imageUrl, isAvailable FROM rooms');
-        res.json(rows);
-    } catch (err) {
-        console.error('Error fetching admin rooms:', err.message);
-        res.status(500).json({ message: 'Server error fetching room data for admin.' });
-    }
-});
-
-// Add New Room (Admin Only)
-app.post('/api/admin/rooms', authMiddleware, authorizeRoles('admin'), async (req, res) => {
-    const { roomNumber, type, pricePerNight, capacity, description, imageUrl, isAvailable } = req.body;
-
-    if (!roomNumber || !type || !pricePerNight || isNaN(pricePerNight) || pricePerNight <= 0 || !capacity || isNaN(capacity) || capacity <= 0) {
-        return res.status(400).json({ message: 'Please enter all required room fields: number, type, price, and capacity, and ensure price/capacity are positive numbers.' });
-    }
-
-    try {
-        const [existingRooms] = await connection.execute('SELECT id FROM rooms WHERE roomNumber = ?', [roomNumber]);
-        if (existingRooms.length > 0) {
-            return res.status(400).json({ message: 'Room number already exists. Please choose a different one.' });
-        }
-
-        const roomIsAvailable = (typeof isAvailable === 'boolean') ? isAvailable : true; 
-
-        const [result] = await connection.execute(
-            'INSERT INTO rooms (roomNumber, type, pricePerNight, capacity, description, imageUrl, isAvailable) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [roomNumber, type, pricePerNight, capacity, description, imageUrl || null, roomIsAvailable]
-        );
-
-        const roomId = result.insertId;
-
-        res.status(201).json({
-            message: 'Room added successfully!',
-            room: { id: roomId, roomNumber, type, pricePerNight, capacity, description, imageUrl, isAvailable: roomIsAvailable, createdAt: new Date() }
-        });
-
-    } catch (err) {
-        console.error('Error adding room:', err.message);
-        res.status(500).json({ message: 'Server error adding room.' });
-    }
-});
-
-// Update Room Details (Admin Only)
-app.put('/api/admin/rooms/:id', authMiddleware, authorizeRoles('admin'), async (req, res) => {
-    const roomId = req.params.id;
-    const { roomNumber, type, pricePerNight, capacity, description, imageUrl, isAvailable } = req.body;
-
-    try {
-        const [existingRoomRows] = await connection.execute('SELECT * FROM rooms WHERE id = ?', [roomId]);
-        const room = existingRoomRows[0];
-        if (!room) {
-            return res.status(404).json({ message: 'Room not found.' });
-        }
-
-        if (roomNumber && roomNumber !== room.roomNumber) {
-            const [duplicateRooms] = await connection.execute('SELECT id FROM rooms WHERE roomNumber = ? AND id != ?', [roomNumber, roomId]);
-            if (duplicateRooms.length > 0) {
-                return res.status(400).json({ message: 'New room number already exists for another room.' });
+            if (!isMatch) {
+                return res.status(401).json({ message: 'Invalid username or password' });
             }
-        }
 
-        const updateFields = [];
-        const updateValues = [];
-
-        if (roomNumber !== undefined) { updateFields.push('roomNumber = ?'); updateValues.push(roomNumber); }
-        if (type !== undefined) { updateFields.push('type = ?'); updateValues.push(type); }
-        if (pricePerNight !== undefined) { updateFields.push('pricePerNight = ?'); updateValues.push(pricePerNight); }
-        if (capacity !== undefined) { updateFields.push('capacity = ?'); updateValues.push(capacity); }
-        if (description !== undefined) { updateFields.push('description = ?'); updateValues.push(description); }
-        if (imageUrl !== undefined) { updateFields.push('imageUrl = ?'); updateValues.push(imageUrl); }
-        if (isAvailable !== undefined) { updateFields.push('isAvailable = ?'); updateValues.push(isAvailable); }
-
-        if (updateFields.length === 0) {
-            return res.status(400).json({ message: 'No fields provided for update.' });
-        }
-
-        const query = `UPDATE rooms SET ${updateFields.join(', ')} WHERE id = ?`;
-        await connection.execute(query, [...updateValues, roomId]);
-
-        const [updatedRoomRows] = await connection.execute('SELECT id, roomNumber, type, pricePerNight, capacity, description, imageUrl, isAvailable FROM rooms WHERE id = ?', [roomId]);
-
-        res.json({
-            message: 'Room updated successfully!',
-            room: updatedRoomRows[0]
+            // User authenticated, create JWT
+            const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '1h' });
+            res.json({ message: 'Logged in successfully', token, user: { id: user.id, username: user.username, role: user.role } });
         });
-
-    } catch (err) {
-        console.error('Error updating room:', err.message);
-        res.status(500).json({ message: 'Server error updating room.' });
-    }
+    });
 });
 
-// Delete Room (Admin Only)
-app.delete('/api/admin/rooms/:id', authMiddleware, authorizeRoles('admin'), async (req, res) => {
-    const roomId = req.params.id;
-
-    try {
-        const [existingRoomRows] = await connection.execute('SELECT id FROM rooms WHERE id = ?', [roomId]);
-        if (existingRoomRows.length === 0) {
-            return res.status(404).json({ message: 'Room not found.' });
+// Get all rooms (public)
+app.get('/api/rooms', (req, res) => {
+    const sql = 'SELECT id, type, room_number, description, price_per_night, capacity, image_url, availability FROM rooms';
+    db.all(sql, [], (err, rows) => {
+        if (err) {
+            res.status(500).json({ message: 'Error retrieving rooms', error: err.message });
+            return;
         }
-
-        await connection.execute('DELETE FROM rooms WHERE id = ?', [roomId]);
-
-        res.json({ message: 'Room deleted successfully!' });
-
-    } catch (err) {
-        console.error('Error deleting room:', err.message);
-        res.status(500).json({ message: 'Server error deleting room.' });
-    }
+        const rooms = rows.map(row => ({
+            id: row.id,
+            type: row.type,
+            roomNumber: row.room_number,
+            description: row.description,
+            pricePerNight: row.price_per_night,
+            capacity: row.capacity,
+            imageUrl: row.image_url,
+            availability: row.availability === 1
+        }));
+        res.json(rooms);
+    });
 });
 
-// DFD Data Flow: Make Reservation (from Guest, Admin, Customer Service)
-// Create a new booking for any logged-in user.
-app.post('/api/bookings', authMiddleware, async (req, res) => {
+// NEW ROUTE: Get a single room by ID (public)
+app.get('/api/rooms/:id', (req, res) => {
+    const roomId = req.params.id;
+    const sql = 'SELECT id, type, room_number, description, price_per_night, capacity, image_url, availability FROM rooms WHERE id = ?';
+
+    db.get(sql, [roomId], (err, row) => {
+        if (err) {
+            console.error('Error retrieving room by ID:', err.message);
+            res.status(500).json({ message: 'Error retrieving room', error: err.message });
+            return;
+        }
+        if (!row) {
+            res.status(404).json({ message: 'Room not found' });
+            return;
+        }
+        const room = {
+            id: row.id,
+            type: row.type,
+            roomNumber: row.room_number,
+            description: row.description,
+            pricePerNight: row.price_per_night,
+            capacity: row.capacity,
+            imageUrl: row.image_url,
+            availability: row.availability === 1
+        };
+        res.json(room);
+    });
+});
+
+// Create a new booking (requires authentication)
+app.post('/api/bookings', authenticateToken, (req, res) => {
     const { room_id, check_in_date, check_out_date, guests } = req.body;
-    const userId = req.user.id; // Get user ID from authenticated token
+    const user_id = req.user.id; // User ID from authenticated token
 
-    // Basic validation
     if (!room_id || !check_in_date || !check_out_date || !guests) {
-        return res.status(400).json({ message: 'Please provide room ID, check-in date, check-out date, and number of guests.' });
-    }
-    if (isNaN(guests) || guests <= 0) {
-        return res.status(400).json({ message: 'Number of guests must be a positive number.' });
+        return res.status(400).json({ message: 'All booking fields are required.' });
     }
 
     // Convert dates to Date objects for comparison
-    const checkIn = new Date(check_in_date);
-    const checkOut = new Date(check_out_date);
+    const inDate = new Date(check_in_date);
+    const outDate = new Date(check_out_date);
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Normalize today's date to start of day
+    today.setHours(0, 0, 0, 0); // Normalize today's date
 
-    if (checkIn.getTime() >= checkOut.getTime()) {
-        return res.status(400).json({ message: 'Check-out date must be after check-in date.' });
-    }
-    if (checkIn.getTime() < today.getTime()) {
+    if (inDate < today) {
         return res.status(400).json({ message: 'Check-in date cannot be in the past.' });
     }
+    if (outDate <= inDate) {
+        return res.status(400).json({ message: 'Check-out date must be after check-in date.' });
+    }
 
-    let room;
-    try {
-        // 1. Get room details and check availability/capacity
-        const [roomRows] = await connection.execute(
-            'SELECT id, pricePerNight, capacity, isAvailable FROM rooms WHERE id = ?',
-            [room_id]
-        );
-        room = roomRows[0];
-
+    db.get('SELECT price_per_night, capacity FROM rooms WHERE id = ?', [room_id], (err, room) => {
+        if (err) {
+            return res.status(500).json({ message: 'Error retrieving room price', error: err.message });
+        }
         if (!room) {
             return res.status(404).json({ message: 'Room not found.' });
-        }
-        if (!room.isAvailable) {
-            return res.status(400).json({ message: 'This room is currently not available for booking.' });
         }
         if (guests > room.capacity) {
             return res.status(400).json({ message: `Number of guests exceeds room capacity (${room.capacity}).` });
         }
 
-        // 2. Check for overlapping bookings
-        const [overlappingBookings] = await connection.execute(
-            `SELECT id FROM bookings
-             WHERE room_id = ?
-               AND status IN ('pending', 'confirmed') -- Consider these as unavailable dates
-               AND (
-                    (check_in_date <= ? AND check_out_date > ?) OR -- Existing booking starts before or on new check-out and ends after new check-in
-                    (check_in_date < ? AND check_out_date >= ?)    -- Existing booking starts before new check-in and ends after or on new check-out
-               )`,
-            [room_id, checkOut.toISOString().slice(0, 10), checkIn.toISOString().slice(0, 10),
-                      checkOut.toISOString().slice(0, 10), checkIn.toISOString().slice(0, 10)]
-        );
-
-        if (overlappingBookings.length > 0) {
-            return res.status(409).json({ message: 'This room is already booked for some part of the requested dates.' });
-        }
-
-        // 3. Calculate total price
-        const oneDay = 24 * 60 * 60 * 1000; // milliseconds in a day
-        const numberOfNights = Math.round(Math.abs((checkOut - checkIn) / oneDay));
-        const totalPrice = numberOfNights * room.pricePerNight;
-
-        // 4. Create the booking
-        const [result] = await connection.execute(
-            'INSERT INTO bookings (room_id, user_id, check_in_date, check_out_date, guests, total_price) VALUES (?, ?, ?, ?, ?, ?)',
-            [room_id, userId, check_in_date, check_out_date, guests, totalPrice]
-        );
-
-        const bookingId = result.insertId;
-
-        res.status(201).json({
-            message: 'Booking created successfully!',
-            booking: {
-                id: bookingId,
-                room_id,
-                user_id: userId,
-                check_in_date,
-                check_out_date,
-                guests,
-                total_price: totalPrice,
-                status: 'pending' // Default status from DB
+        // Check for room availability for the given dates
+        const checkAvailabilitySql = `
+            SELECT COUNT(*) AS count FROM bookings
+            WHERE room_id = ?
+            AND (
+                (check_in_date <= ? AND check_out_date > ?) OR
+                (check_in_date < ? AND check_out_date >= ?)
+            )
+            AND status = 'confirmed'
+        `;
+        db.get(checkAvailabilitySql, [room_id, check_out_date, check_in_date, check_out_date, check_in_date], (err, result) => {
+            if (err) {
+                console.error('Error checking room availability:', err.message);
+                return res.status(500).json({ message: 'Error checking room availability', error: err.message });
             }
+
+            if (result.count > 0) {
+                return res.status(409).json({ message: 'Room is not available for the selected dates.' });
+            }
+
+            // Calculate total price
+            const oneDay = 24 * 60 * 60 * 1000; // hours*minutes*seconds*milliseconds
+            const diffDays = Math.round(Math.abs((outDate - inDate) / oneDay));
+            const totalPrice = diffDays * room.price_per_night;
+
+            const sql = 'INSERT INTO bookings (user_id, room_id, check_in_date, check_out_date, guests, total_price) VALUES (?, ?, ?, ?, ?, ?)';
+            db.run(sql, [user_id, room_id, check_in_date, check_out_date, guests, totalPrice], function (err) {
+                if (err) {
+                    console.error('Error creating booking:', err.message); // Log the specific error
+                    return res.status(500).json({ message: 'Error creating booking', error: err.message });
+                }
+                res.status(201).json({ message: 'Booking created successfully', bookingId: this.lastID, totalPrice: totalPrice });
+            });
         });
-
-    } catch (err) {
-        console.error('Error creating booking:', err.message);
-        res.status(500).json({ message: 'Server error creating booking.' });
-    }
-});
-
-// DFD Data Flow: View Reservations (to Guest, Admin, Customer Service - specific to user)
-// Get all bookings for the currently authenticated user.
-app.get('/api/bookings/my', authMiddleware, async (req, res) => {
-    const userId = req.user.id; // Get user ID from authenticated token
-
-    try {
-        const [bookings] = await connection.execute(
-            `SELECT
-                b.id,
-                b.room_id,
-                r.roomNumber,
-                r.type AS roomType,
-                r.pricePerNight,
-                b.user_id,
-                u.username AS bookedBy,
-                b.check_in_date,
-                b.check_out_date,
-                b.guests,
-                b.total_price,
-                b.status,
-                b.created_at,
-                b.updated_at
-             FROM bookings b
-             JOIN rooms r ON b.room_id = r.id
-             JOIN users u ON b.user_id = u.id
-             WHERE b.user_id = ?
-             ORDER BY b.created_at DESC`,
-            [userId]
-        );
-
-        res.json(bookings);
-
-    } catch (err) {
-        console.error('Error fetching user bookings:', err.message);
-        res.status(500).json({ message: 'Server error fetching your bookings.' });
-    }
-});
-
-// DFD Data Flow: View All Reservations (to Admin, Customer Service)
-// Get all bookings in the system (for management purposes).
-app.get('/api/admin/bookings', authMiddleware, authorizeRoles('admin', 'customer service'), async (req, res) => {
-    try {
-        const [allBookings] = await connection.execute(
-            `SELECT
-                b.id,
-                b.room_id,
-                r.roomNumber,
-                r.type AS roomType,
-                r.pricePerNight,
-                b.user_id,
-                u.username AS bookedBy,
-                b.check_in_date,
-                b.check_out_date,
-                b.guests,
-                b.total_price,
-                b.status,
-                b.created_at,
-                b.updated_at
-             FROM bookings b
-             JOIN rooms r ON b.room_id = r.id
-             JOIN users u ON b.user_id = u.id
-             ORDER BY b.created_at DESC`
-        );
-
-        res.json(allBookings);
-
-    } catch (err) {
-        console.error('Error fetching all bookings for admin:', err.message);
-        res.status(500).json({ message: 'Server error fetching all bookings.' });
-    }
-});
-
-// DFD Data Flow: Manage Booking Status (from Admin, Customer Service)
-// Update the status of a specific booking.
-app.put('/api/admin/bookings/:id/status', authMiddleware, authorizeRoles('admin', 'customer service'), async (req, res) => {
-    const bookingId = req.params.id;
-    const { status } = req.body;
-
-    // Define allowed booking statuses
-    const allowedStatuses = ['pending', 'confirmed', 'cancelled', 'completed'];
-
-    if (!status || !allowedStatuses.includes(status.toLowerCase())) {
-        return res.status(400).json({ message: `Invalid status provided. Allowed statuses are: ${allowedStatuses.join(', ')}.` });
-    }
-
-    try {
-        // Check if the booking exists
-        const [existingBookingRows] = await connection.execute('SELECT id, status FROM bookings WHERE id = ?', [bookingId]);
-        if (existingBookingRows.length === 0) {
-            return res.status(404).json({ message: 'Booking not found.' });
-        }
-
-        // Update the booking status
-        await connection.execute(
-            'UPDATE bookings SET status = ?, updated_at = NOW() WHERE id = ?',
-            [status.toLowerCase(), bookingId]
-        );
-
-        res.json({ message: `Booking ${bookingId} status updated to ${status.toLowerCase()} successfully!` });
-
-    } catch (err) {
-        console.error('Error updating booking status:', err.message);
-        res.status(500).json({ message: 'Server error updating booking status.' });
-    }
-});
-
-// DFD Data Flow: Cancel Reservation (from Guest, Admin, Customer Service)
-// Allows the user who made the booking (or an admin/CS) to cancel it.
-app.put('/api/bookings/:id/cancel', authMiddleware, async (req, res) => {
-    const bookingId = req.params.id;
-    const userId = req.user.id; // User attempting the cancellation
-    const userRole = req.user.role; // Role of the user attempting the cancellation
-
-    try {
-        const [bookingRows] = await connection.execute('SELECT user_id, status FROM bookings WHERE id = ?', [bookingId]);
-        const booking = bookingRows[0];
-
-        if (!booking) {
-            return res.status(404).json({ message: 'Booking not found.' });
-        }
-
-        // Check if the user is authorized to cancel this booking
-        // - If it's the booking owner AND not an admin/CS, they must own it.
-        // - If it's an admin or customer service, they can cancel any booking.
-        const isOwner = booking.user_id === userId;
-        const isAdminOrCS = ['admin', 'customer service'].includes(userRole);
-
-        if (!isOwner && !isAdminOrCS) {
-            return res.status(403).json({ message: 'Access denied. You can only cancel your own bookings.' });
-        }
-
-        // Check if the booking is already cancelled or completed
-        if (booking.status === 'cancelled') {
-            return res.status(400).json({ message: 'Booking is already cancelled.' });
-        }
-        if (booking.status === 'completed') {
-            return res.status(400).json({ message: 'Cannot cancel a completed booking.' });
-        }
-
-        // Update the booking status to 'cancelled'
-        await connection.execute(
-            'UPDATE bookings SET status = ?, updated_at = NOW() WHERE id = ?',
-            ['cancelled', bookingId]
-        );
-
-        res.json({ message: `Booking ${bookingId} has been successfully cancelled.` });
-
-    } catch (err) {
-        console.error('Error cancelling booking:', err.message);
-        res.status(500).json({ message: 'Server error cancelling booking.' });
-    }
-});
-
-// --- DFD Data Flow: View Customer Details & Manage User Accounts (from Admin) ---
-// These routes allow admins to manage user accounts.
-
-// Get All Users (Admin Only)
-app.get('/api/admin/users', authMiddleware, authorizeRoles('admin'), async (req, res) => {
-    try {
-        // Exclude password hash from the response for security
-        const [users] = await connection.execute('SELECT id, username, role, created_at FROM users');
-        res.json(users);
-    } catch (err) {
-        console.error('Error fetching all users:', err.message);
-        res.status(500).json({ message: 'Server error fetching user accounts.' });
-    }
-});
-
-// Get User by ID (Admin Only)
-app.get('/api/admin/users/:id', authMiddleware, authorizeRoles('admin'), async (req, res) => {
-    const userId = req.params.id;
-    try {
-        const [userRows] = await connection.execute('SELECT id, username, role, created_at FROM users WHERE id = ?', [userId]);
-        const user = userRows[0];
-        if (!user) {
-            return res.status(404).json({ message: 'User not found.' });
-        }
-        res.json(user);
-    } catch (err) {
-        console.error('Error fetching user by ID:', err.message);
-        res.status(500).json({ message: 'Server error fetching user details.' });
-    }
-});
-
-// Update User Role (Admin Only)
-app.put('/api/admin/users/:id', authMiddleware, authorizeRoles('admin'), async (req, res) => {
-    const userId = req.params.id;
-    const { role } = req.body;
-
-    if (!role || !['guest', 'admin', 'customer service'].includes(role.toLowerCase())) {
-        return res.status(400).json({ message: 'Invalid role provided. Allowed roles are: guest, admin, customer service.' });
-    }
-
-    try {
-        const [userRows] = await connection.execute('SELECT id, role FROM users WHERE id = ?', [userId]);
-        const user = userRows[0];
-        if (!user) {
-            return res.status(404).json({ message: 'User not found.' });
-        }
-
-        // Prevent an admin from demoting themselves or the primary admin account
-        // This is a common security practice. Adjust logic as needed.
-        if (userId === req.user.id && role.toLowerCase() !== 'admin') {
-            return res.status(403).json({ message: 'Administrators cannot demote their own account directly.' });
-        }
-        // More stringent check: prevent changing primary admin role (e.g., if ID 1 is the super admin)
-        // if (userId === 1 && user.role === 'admin' && role.toLowerCase() !== 'admin') {
-        //     return res.status(403).json({ message: 'Cannot change the role of the primary admin account.' });
-        // }
-
-        await connection.execute('UPDATE users SET role = ?, updated_at = NOW() WHERE id = ?', [role.toLowerCase(), userId]);
-
-        res.json({ message: `User ${userId} role updated to ${role.toLowerCase()} successfully!` });
-
-    } catch (err) {
-        console.error('Error updating user role:', err.message);
-        res.status(500).json({ message: 'Server error updating user role.' });
-    }
-});
-
-// Delete User (Admin Only)
-app.delete('/api/admin/users/:id', authMiddleware, authorizeRoles('admin'), async (req, res) => {
-    const userId = req.params.id;
-
-    try {
-        const [userRows] = await connection.execute('SELECT id, username, role FROM users WHERE id = ?', [userId]);
-        const userToDelete = userRows[0];
-        if (!userToDelete) {
-            return res.status(404).json({ message: 'User not found.' });
-        }
-
-        // Prevent an admin from deleting their own account
-        if (userId === req.user.id) {
-            return res.status(403).json({ message: 'You cannot delete your own account.' });
-        }
-
-        // Prevent deletion of primary admin account (e.g., if ID 1 is the super admin)
-        // if (userToDelete.id === 1 && userToDelete.role === 'admin') {
-        //     return res.status(403).json({ message: 'Cannot delete the primary admin account.' });
-        // }
-
-        // Before deleting the user, consider how to handle their associated bookings.
-        // Options:
-        // 1. Delete associated bookings (CASCADE DELETE in SQL schema).
-        // 2. Nullify user_id in bookings (if user_id can be NULL in bookings table).
-        // 3. Prevent deletion if user has active bookings.
-        // For now, we assume your database schema has ON DELETE CASCADE or you're aware of the implications.
-        await connection.execute('DELETE FROM users WHERE id = ?', [userId]);
-
-        res.json({ message: `User ${userToDelete.username} (ID: ${userId}) deleted successfully.` });
-
-    } catch (err) {
-        console.error('Error deleting user:', err.message);
-        // Specifically check for foreign key constraint errors if not using CASCADE DELETE
-        if (err.code === 'ER_ROW_IS_REFERENCED_2') {
-            return res.status(400).json({ message: 'Cannot delete user because they have existing bookings. Please delete their bookings first or consider marking the user as inactive instead.' });
-        }
-        res.status(500).json({ message: 'Server error deleting user.' });
-    }
-});
-
-
-// --- Example Protected Routes (for testing authentication and roles) ---
-// This route can be accessed by any logged-in user (guest, admin, customer service)
-app.get('/api/protected', authMiddleware, (req, res) => {
-    res.json({
-        message: `Welcome, ${req.user.username || 'user'}! You are logged in as a ${req.user.role}. This is a protected route.`,
-        user: req.user
     });
 });
 
-// This route can ONLY be accessed by an 'admin' user
-app.get('/api/admin/dashboard', authMiddleware, authorizeRoles('admin'), (req, res) => {
-    res.json({
-        message: `Welcome to the Admin Dashboard, ${req.user.username}! You have access to admin functionalities.`,
-        user: req.user
+// Get bookings for the authenticated user
+app.get('/api/bookings/my', authenticateToken, (req, res) => {
+    const userId = req.user.id;
+    const sql = `
+        SELECT
+            b.id,
+            b.check_in_date,
+            b.check_out_date,
+            b.guests,
+            b.total_price,
+            b.status,
+            b.created_at,
+            r.type AS roomType,
+            r.room_number AS roomNumber,
+            r.price_per_night AS roomPricePerNight -- Include room details
+        FROM bookings b
+        JOIN rooms r ON b.room_id = r.id
+        WHERE b.user_id = ?
+        ORDER BY b.created_at DESC
+    `;
+    db.all(sql, [userId], (err, rows) => {
+        if (err) {
+            res.status(500).json({ message: 'Error retrieving user bookings', error: err.message });
+            return;
+        }
+        res.json(rows);
     });
 });
 
-
-// --- Start the server ---
-// Makes the Express app listen for incoming requests on the specified port
+// Start the server
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
